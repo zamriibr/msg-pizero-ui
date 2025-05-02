@@ -24,6 +24,7 @@
             border-radius: 4px;
             white-space: pre-wrap;
             font-family: monospace;
+            min-height: 100px;
         }
         button {
             background-color: #4CAF50;
@@ -44,13 +45,26 @@
             margin-bottom: 5px;
             font-weight: bold;
         }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .error {
+            background-color: #f2dede;
+            color: #a94442;
+        }
     </style>
 </head>
 <body>
     <h1>LED Blink Controller</h1>
     
     <div class="form-group">
-        <label for="system-prompt">System Prompt:</label>
+        <label for="system-prompt">System Prompt (Optional):</label>
         <textarea id="system-prompt">Convert blinking LED commands into JSON format. Return ONLY valid JSON with NO COMMENTS.
 
 For blinking patterns:
@@ -61,12 +75,6 @@ For blinking patterns:
     ]
 }
 
-For Morse code:
-{
-    "command": "morse",
-    "text": "<text to encode>"
-}
-
 Return ONLY the JSON object. No explanations, comments, or code blocks.</textarea>
     </div>
     
@@ -75,38 +83,67 @@ Return ONLY the JSON object. No explanations, comments, or code blocks.</textare
         <textarea id="user-prompt" placeholder="Enter your blinking command here...">blink 5 times with 2 seconds on and 1 second off</textarea>
     </div>
     
+    <div class="form-group">
+        <label for="function-url">Azure Function URL:</label>
+        <input type="text" id="function-url" style="width: 100%; padding: 8px;" 
+               value="https://msg-pizero-py.azurewebsites.net/api/http_trigger_pi">
+    </div>
+    
     <button id="send-button">Send Command</button>
     
     <h2>Response:</h2>
     <div id="response" class="output">Results will appear here...</div>
+    <div id="status" class="status"></div>
 
     <script>
         document.getElementById('send-button').addEventListener('click', async () => {
             const systemPrompt = document.getElementById('system-prompt').value;
             const userPrompt = document.getElementById('user-prompt').value;
+            const functionUrl = document.getElementById('function-url').value;
             const responseDiv = document.getElementById('response');
+            const statusDiv = document.getElementById('status');
             
             responseDiv.textContent = 'Sending request...';
+            statusDiv.className = 'status';
+            statusDiv.textContent = '';
             
             try {
-                // Replace with your actual Azure Function URL
-                const functionUrl = 'https://msg-pizero-py.azurewebsites.net/api/http_trigger_pi';
-                
+                // Using the working format from your curl command
                 const response = await fetch(functionUrl, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        system_prompt: systemPrompt,
-                        user_prompt: userPrompt
+                        "user_prompt": userPrompt,
+                        // Only include system_prompt if you're sure the API supports it
+                        ...(systemPrompt ? {"system_prompt": systemPrompt} : {})
                     })
                 });
                 
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                
                 const data = await response.text();
                 responseDiv.textContent = data;
+                
+                statusDiv.className = 'status success';
+                statusDiv.textContent = 'Command sent successfully!';
             } catch (error) {
-                responseDiv.textContent = `Errorssss: ${error.message}`;
+                responseDiv.textContent = 'Request failed';
+                
+                statusDiv.className = 'status error';
+                statusDiv.innerHTML = `
+                    <strong>Error: ${error.message}</strong><br>
+                    <ul>
+                        <li>Check that the Azure Function URL is correct</li>
+                        <li>Make sure your Azure Function is running</li>
+                        <li>Verify that CORS is enabled on your Function App</li>
+                    </ul>
+                    <p>Working curl command for reference:</p>
+                    <code>curl -X POST ${functionUrl} -H "Content-Type: application/json" -d '{"user_prompt": "${userPrompt.replace(/"/g, '\\"')}"}'</code>
+                `;
             }
         });
     </script>
